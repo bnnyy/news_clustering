@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Система группировки и кластеризации новостей</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="hero">
+            <div>
+              <p style="font-size:14px; color:#6b7280;">
+                Сервис интеллектуальной обработки новостных потоков
+              </p>
+                <h1>Система группировки и кластеризации новостей</h1>
+                <p class="subtitle">
+                    Веб-интерфейс для загрузки новостей, выбора алгоритма кластеризации
+                    и анализа качества полученных результатов.
+                </p>
+            </div>
+        </header>
+
+        <main class="grid">
+            <section class="card">
+                <h2>Параметры обработки</h2>
+
+                <label for="algorithm">Алгоритм кластеризации</label>
+                <select id="algorithm">
+                    <option value="kmeans">KMeans</option>
+                    <option value="agglomerative">Агломеративная кластеризация</option>
+                    <option value="dbscan">DBSCAN</option>
+                </select>
+
+                <label for="vectorizer_type">Тип векторизации текста</label>
+                <select id="vectorizer_type">
+                    <option value="tfidf">TF-IDF</option>
+                    <option value="embeddings">Эмбеддинги предложений</option>
+                </select>
+
+                <div class="row">
+                    <div>
+                        <label for="n_clusters">Количество кластеров</label>
+                        <input id="n_clusters" type="number" value="3" min="2">
+                    </div>
+                    <div>
+                        <label for="eps">Параметр eps</label>
+                        <input id="eps" type="number" value="0.7" step="0.1">
+                    </div>
+                </div>
+
+                <label for="min_samples">Минимальное число элементов</label>
+                <input id="min_samples" type="number" value="2" min="1">
+
+                <label for="news_input">Новости</label>
+                <textarea id="news_input" rows="18" placeholder="Первая строка — заголовок, ниже — текст новости. Между новостями оставляйте пустую строку."></textarea>
+
+                <div class="button-row">
+                  <button id="load_demo">Загрузить демонстрационные данные</button>
+                  <label for="file_input" class="file-button">Загрузить JSON-файл</label>
+                  <input id="file_input" type="file" accept=".json" class="hidden-file-input">
+                  <button id="run_cluster" class="primary">Запустить кластеризацию</button>
+                 </div>
+
+                <div id="error_box" class="error hidden"></div>
+            </section>
+
+            <section class="card">
+                <h2>Результаты</h2>
+
+                <div id="empty_state" class="empty-state">
+                    Результаты пока не получены. Запустите кластеризацию.
+                </div>
+
+                <div id="result_block" class="hidden">
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-title">Алгоритм</div>
+                            <div id="metric_algorithm" class="metric-value">—</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-title">Количество кластеров</div>
+                            <div id="metric_clusters" class="metric-value">—</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-title">Silhouette Score</div>
+                            <div id="metric_silhouette" class="metric-value">—</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-title">ARI</div>
+                            <div id="metric_ari" class="metric-value">—</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-title">NMI</div>
+                            <div id="metric_nmi" class="metric-value">—</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-title">Шумовые точки</div>
+                            <div id="metric_noise" class="metric-value">—</div>
+                        </div>
+                    </div>
+                    <h3>Графики</h3>
+                      <div class="charts-grid">
+                          <div class="chart-card">
+                              <h4>Распределение новостей по кластерам</h4>
+                              <canvas id="clustersChart"></canvas>
+                          </div>
+                          <div class="chart-card">
+                              <h4>Метрики качества кластеризации</h4>
+                              <canvas id="metricsChart"></canvas>
+                          </div>
+                      </div>
+                    <h3>Кластеры</h3>
+                    <div id="clusters_container"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+    const demoNews = [
+        {
+            title: "Apple представила новый iPhone",
+            text: "Компания Apple анонсировала новую модель iPhone на ежегодной презентации."
+        },
+        {
+            title: "На презентации Apple показали новый смартфон",
+            text: "Корпорация Apple выпустила новый iPhone с обновленной камерой и процессором."
+        },
+        {
+            title: "Цены на нефть выросли",
+            text: "Мировые цены на нефть показали рост после публикации данных о сокращении запасов."
+        },
+        {
+            title: "Нефть дорожает на рынке",
+            text: "Стоимость нефти увеличилась на фоне ожиданий снижения добычи."
+        },
+        {
+            title: "Футбольный клуб выиграл матч",
+            text: "Команда одержала победу со счетом 2:0 в домашнем матче чемпионата."
+        },
+        {
+            title: "Победа команды в чемпионате",
+            text: "Футбольный клуб успешно завершил матч и набрал важные очки."
+        }
+    ];
+
+    let clustersChartInstance = null;
+    let metricsChartInstance = null;
+
+    function formatMetric(value) {
+        if (value === null || value === undefined) return "—";
+        if (typeof value === "number") return value.toFixed(4);
+        return String(value);
+    }
+
+    function parseNews(text) {
+        const blocks = text
+            .split(/\n\s*\n/)
+            .map(item => item.trim())
+            .filter(Boolean);
+
+        return blocks.map((block, index) => {
+            const lines = block
+                .split("\n")
+                .map(line => line.trim())
+                .filter(Boolean);
+
+            return {
+                id: index + 1,
+                title: lines[0] || `Новость ${index + 1}`,
+                text: lines.slice(1).join(" ") || "Текст новости не указан.",
+                true_cluster: null
+            };
+        });
+    }
+
+    function newsToTextarea(newsArray) {
+    return newsArray
+        .map(item => `${item.title}\n${item.text}`)
+        .join("\n\n");
+}
+
+function loadNewsFromJsonFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = function(event) {
+            try {
+                const data = JSON.parse(event.target.result);
+
+                if (!Array.isArray(data)) {
+                    reject(new Error("JSON-файл должен содержать массив новостей."));
+                    return;
+                }
+
+                for (const item of data) {
+                    if (!item.title || !item.text) {
+                        reject(new Error("Каждая новость в JSON должна содержать поля title и text."));
+                        return;
+                    }
+                }
+
+                resolve(data);
+            } catch (error) {
+                reject(new Error("Не удалось прочитать JSON-файл."));
+            }
+        };
+
+        reader.onerror = function() {
+            reject(new Error("Ошибка чтения файла."));
+        };
+
+        reader.readAsText(file, "utf-8");
+    });
+}
+
+    function renderClusters(groupedClusters) {
+        const container = document.getElementById("clusters_container");
+        container.innerHTML = "";
+
+        for (const clusterId in groupedClusters) {
+            const clusterBlock = document.createElement("div");
+            clusterBlock.className = "cluster-block";
+
+            const header = document.createElement("div");
+            header.className = "cluster-header";
+            header.innerHTML = `<h4>Кластер ${clusterId}</h4><span>${groupedClusters[clusterId].length} нов.</span>`;
+            clusterBlock.appendChild(header);
+
+            groupedClusters[clusterId].forEach(item => {
+                const newsItem = document.createElement("div");
+                newsItem.className = "news-item";
+                newsItem.innerHTML = `
+                    <div class="news-title">${item.title}</div>
+                    <div class="news-meta">ID: ${item.id}</div>
+                    <div class="news-processed"><strong>Предобработанный текст:</strong> ${item.processed_text}</div>
+                `;
+                clusterBlock.appendChild(newsItem);
+            });
+
+            container.appendChild(clusterBlock);
+        }
+    }
+
+    function buildClustersChart(groupedClusters) {
+        const labels = Object.keys(groupedClusters).map(id => `Кластер ${id}`);
+        const values = Object.values(groupedClusters).map(items => items.length);
+
+        const ctx = document.getElementById("clustersChart").getContext("2d");
+
+        if (clustersChartInstance) {
+            clustersChartInstance.destroy();
+        }
+
+        clustersChartInstance = new Chart(ctx, {
+            type: "bar",
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: "Количество новостей",
+                    data: values,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: true
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function buildMetricsChart(metrics) {
+        const rawMetrics = [
+            { name: "Silhouette", value: metrics.silhouette_score },
+            { name: "ARI", value: metrics.adjusted_rand_index },
+            { name: "NMI", value: metrics.normalized_mutual_info }
+        ];
+
+        const filtered = rawMetrics.filter(item => item.value !== null && item.value !== undefined);
+
+        const ctx = document.getElementById("metricsChart").getContext("2d");
+
+        if (metricsChartInstance) {
+            metricsChartInstance.destroy();
+        }
+
+        metricsChartInstance = new Chart(ctx, {
+            type: "bar",
+            data: {
+                labels: filtered.map(item => item.name),
+                datasets: [{
+                    label: "Значение метрики",
+                    data: filtered.map(item => item.value),
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: true
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 1
+                    }
+                }
+            }
+        });
+    }
+
+    async function runClustering() {
+        const errorBox = document.getElementById("error_box");
+        const emptyState = document.getElementById("empty_state");
+        const resultBlock = document.getElementById("result_block");
+
+        errorBox.classList.add("hidden");
+        errorBox.textContent = "";
+
+        const newsText = document.getElementById("news_input").value;
+        const news = parseNews(newsText);
+
+        if (news.length < 2) {
+            errorBox.textContent = "Добавьте как минимум две новости для кластеризации.";
+            errorBox.classList.remove("hidden");
+            return;
+        }
+
+        const payload = {
+          news: news,
+          algorithm: document.getElementById("algorithm").value,
+          vectorizer_type: document.getElementById("vectorizer_type").value,
+          n_clusters: Number(document.getElementById("n_clusters").value),
+          eps: Number(document.getElementById("eps").value),
+          min_samples: Number(document.getElementById("min_samples").value)
+      };
+
+        try {
+            const response = await fetch("/cluster", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.detail || "Не удалось выполнить кластеризацию.");
+            }
+
+            document.getElementById("metric_algorithm").textContent = data.algorithm;
+            document.getElementById("metric_clusters").textContent = data.metrics.n_clusters_detected ?? "—";
+            document.getElementById("metric_silhouette").textContent = formatMetric(data.metrics.silhouette_score);
+            document.getElementById("metric_ari").textContent = formatMetric(data.metrics.adjusted_rand_index);
+            document.getElementById("metric_nmi").textContent = formatMetric(data.metrics.normalized_mutual_info);
+            document.getElementById("metric_noise").textContent = data.metrics.noise_points ?? "—";
+
+            renderClusters(data.grouped_clusters);
+            buildClustersChart(data.grouped_clusters);
+            buildMetricsChart(data.metrics);
+
+            emptyState.classList.add("hidden");
+            resultBlock.classList.remove("hidden");
+        } catch (error) {
+            errorBox.textContent = error.message;
+            errorBox.classList.remove("hidden");
+        }
+    }
+
+    document.getElementById("run_cluster").addEventListener("click", runClustering);
+
+    document.getElementById("load_demo").addEventListener("click", () => {
+    const text = newsToTextarea(demoNews);
+    document.getElementById("news_input").value = text;
+});
+
+document.getElementById("file_input").addEventListener("change", async (event) => {
+    const errorBox = document.getElementById("error_box");
+    errorBox.classList.add("hidden");
+    errorBox.textContent = "";
+
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+        const loadedNews = await loadNewsFromJsonFile(file);
+        document.getElementById("news_input").value = newsToTextarea(loadedNews);
+    } catch (error) {
+        errorBox.textContent = error.message;
+        errorBox.classList.remove("hidden");
+    }
+});
+
+    document.getElementById("load_demo").click();
+</script>
+</body>
+</html>

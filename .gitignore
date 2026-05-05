@@ -1,0 +1,16 @@
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+
+data/
+*.csv
+*.json
+
+notebooks/
+
+.idea/
+.vscode/
+
+node_modules/
