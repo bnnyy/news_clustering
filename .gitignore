@@ -1,16 +1,19 @@
-venv/
 .venv/
-env/
+venv/
 __pycache__/
 *.pyc
 
-data/
-*.csv
-*.json
+.mypy_cache/
+.pytest_cache/
 
-notebooks/
-
-.idea/
-.vscode/
-
+frontend/node_modules/
 node_modules/
+frontend/dist/
+
+.env
+*.log
+
+data/*.csv
+data/*.xlsx
+data/*.pkl
+data/*.joblib
