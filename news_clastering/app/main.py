@@ -1,6 +1,7 @@
 from collections import defaultdict
 
 import numpy as np
+import torch
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,6 +14,8 @@ from app.pipeline import TextPipeline
 from app.clustering import NewsClusterer
 from app.evaluation import evaluate_clusters
 from app.news_fetcher import fetch_news
+from app.topic_extraction import build_cluster_topics
+from app.chronology import build_cluster_chronology
 
 app = FastAPI(title="Система кластеризации новостей")
 
@@ -154,6 +157,15 @@ def home(request: Request):
 def api_root():
     return {"message": "API системы группировки и кластеризации новостей работает"}
 
+@app.get("/system/device")
+def get_device_info():
+    gpu_available = torch.cuda.is_available()
+
+    return {
+        "gpu_available": gpu_available,
+        "device": "cuda" if gpu_available else "cpu",
+        "gpu_name": torch.cuda.get_device_name(0) if gpu_available else None,
+    }
 
 @app.get("/news/api")
 def get_news_from_demo_api(
@@ -232,6 +244,9 @@ def cluster_news(request: ClusterRequest):
                 }
             )
 
+        cluster_topics = build_cluster_topics(grouped_clusters)
+        metrics["cluster_topics"] = cluster_topics    
+
         return ClusterResponse(
             algorithm=request.algorithm,
             metrics=metrics,
@@ -246,7 +261,7 @@ def cluster_news(request: ClusterRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Внутренняя ошибка: {e}")
     
-    @app.get("/news/live")
+@app.get("/news/live")
 def get_live_news(
     query: str = "Россия",
     limit: int = 10,
@@ -258,3 +273,4 @@ def get_live_news(
         return {"items": news, "total": len(news)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
