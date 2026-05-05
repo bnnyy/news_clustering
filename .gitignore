@@ -1,19 +1,29 @@
-.venv/
+# Python
 venv/
+.venv/
 __pycache__/
 *.pyc
 
+# Type checking / tests
 .mypy_cache/
 .pytest_cache/
 
+# Frontend
 frontend/node_modules/
 node_modules/
 frontend/dist/
 
+# Environment
 .env
 *.log
 
-data/*.csv
-data/*.xlsx
-data/*.pkl
-data/*.joblib
+# Large local data / models
+*.pkl
+*.joblib
+*.bin
+*.pt
+*.onnx
+
+# System
+.DS_Store
+Thumbs.db
