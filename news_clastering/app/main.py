@@ -2,22 +2,25 @@ from collections import defaultdict
 
 import numpy as np
 import torch
+
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.middleware.cors import CORSMiddleware
 from sklearn.decomposition import PCA
 
-from app.schemas import ClusterRequest, ClusterResponse, ClusteredNewsItem, ClusterPoint
-from app.pipeline import TextPipeline
+from app.chronology import build_cluster_chronology
 from app.clustering import NewsClusterer
 from app.evaluation import evaluate_clusters
 from app.news_fetcher import fetch_news
+from app.pipeline import TextPipeline
+from app.schemas import ClusterRequest, ClusterResponse, ClusteredNewsItem, ClusterPoint
 from app.topic_extraction import build_cluster_topics
-from app.chronology import build_cluster_chronology
+
 
 app = FastAPI(title="Система кластеризации новостей")
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,6 +32,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -111,6 +115,7 @@ DEMO_API_NEWS = [
 def matrix_to_dense(matrix):
     if hasattr(matrix, "toarray"):
         return matrix.toarray()
+
     return np.asarray(matrix)
 
 
@@ -157,6 +162,7 @@ def home(request: Request):
 def api_root():
     return {"message": "API системы группировки и кластеризации новостей работает"}
 
+
 @app.get("/system/device")
 def get_device_info():
     gpu_available = torch.cuda.is_available()
@@ -166,6 +172,7 @@ def get_device_info():
         "device": "cuda" if gpu_available else "cpu",
         "gpu_name": torch.cuda.get_device_name(0) if gpu_available else None,
     }
+
 
 @app.get("/news/api")
 def get_news_from_demo_api(
@@ -244,14 +251,19 @@ def cluster_news(request: ClusterRequest):
                 }
             )
 
-        cluster_topics = build_cluster_topics(grouped_clusters)
-        metrics["cluster_topics"] = cluster_topics    
+        grouped_clusters_dict = dict(grouped_clusters)
+
+        cluster_topics = build_cluster_topics(grouped_clusters_dict)
+        cluster_chronology = build_cluster_chronology(grouped_clusters_dict)
+
+        metrics["cluster_topics"] = cluster_topics
+        metrics["cluster_chronology"] = cluster_chronology
 
         return ClusterResponse(
             algorithm=request.algorithm,
             metrics=metrics,
             items=items,
-            grouped_clusters=dict(grouped_clusters),
+            grouped_clusters=grouped_clusters_dict,
             cluster_points=cluster_points,
         )
 
@@ -260,7 +272,8 @@ def cluster_news(request: ClusterRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Внутренняя ошибка: {e}")
-    
+
+
 @app.get("/news/live")
 def get_live_news(
     query: str = "Россия",
@@ -271,6 +284,6 @@ def get_live_news(
     try:
         news = fetch_news(query=query, from_date=from_date, to_date=to_date, limit=limit)
         return {"items": news, "total": len(news)}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    

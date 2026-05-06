@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Newspaper,
   BrainCircuit,
@@ -344,14 +344,29 @@ export default function App() {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("metrics");
   const [isSchemeOpen, setIsSchemeOpen] = useState(false);
+  const [deviceInfo, setDeviceInfo] = useState(null);
 
   const parsedNewsPreview = useMemo(() => parseNews(newsText), [newsText]);
+  useEffect(() => {
+  fetch("http://127.0.0.1:8000/system/device")
+    .then((response) => response.json())
+    .then((data) => setDeviceInfo(data))
+    .catch(() => setDeviceInfo(null));
+}, []);
 
   const stats = [
     { title: "Новостей в форме", value: parsedNewsPreview.length, icon: Newspaper },
     { title: "Алгоритм", value: algorithm, icon: Network },
     { title: "Векторизация", value: vectorizerType, icon: BrainCircuit },
-    { title: "Интерфейс", value: "Dashboard", icon: Globe },
+    {
+      title: "Устройство",
+      value: deviceInfo
+        ? deviceInfo.gpu_available
+          ? "GPU"
+          : "CPU"
+        : "проверка...",
+      icon: Cpu,
+    },
   ];
 
   const clusterPieData = useMemo(() => {
@@ -364,10 +379,19 @@ export default function App() {
 
   const metricsBarData = useMemo(() => {
     if (!result?.metrics) return [];
+
     return [
       { name: "Silhouette", value: result.metrics.silhouette_score ?? 0 },
       { name: "ARI", value: result.metrics.adjusted_rand_index ?? 0 },
       { name: "NMI", value: result.metrics.normalized_mutual_info ?? 0 },
+      {
+        name: "Davies-Bouldin",
+        value: result.metrics.davies_bouldin_index ?? 0,
+      },
+      {
+        name: "Calinski-Harabasz",
+        value: result.metrics.calinski_harabasz_index ?? 0,
+      },
     ];
   }, [result]);
 
@@ -614,6 +638,9 @@ export default function App() {
       "silhouette_score",
       "adjusted_rand_index",
       "normalized_mutual_info",
+      "davies_bouldin_index",
+      "calinski_harabasz_index",
+      "noise_ratio",
     ];
 
     const rows = comparison.map((item) => [
@@ -622,6 +649,9 @@ export default function App() {
       item.metrics?.silhouette_score ?? "",
       item.metrics?.adjusted_rand_index ?? "",
       item.metrics?.normalized_mutual_info ?? "",
+      item.metrics?.davies_bouldin_index ?? "",
+      item.metrics?.calinski_harabasz_index ?? "",
+      item.metrics?.noise_ratio ?? "",
     ]);
 
     const csvContent = [header, ...rows]
@@ -907,6 +937,8 @@ export default function App() {
                             return dateA - dateB;
                           });
 
+                          const topic = result?.metrics?.cluster_topics?.[clusterId];
+                          const chronology = result?.metrics?.cluster_chronology?.[clusterId];
                           const timeline = getClusterTimeline(sortedItems);
 
                           return (
@@ -916,7 +948,7 @@ export default function App() {
                                   <Network size={18} />
                                   <div className="cluster-title-text">
                                     <span className="cluster-title-main">
-                                      {generateClusterTitle(items)}
+                                      {topic?.title || generateClusterTitle(items)}
                                     </span>
                                     <span className="cluster-title-sub">
                                       {" · "}Кластер {clusterId}
@@ -929,6 +961,16 @@ export default function App() {
                                 </span>
                               </div>
 
+                              {topic?.keywords?.length > 0 && (
+                                <div className="cluster-keywords">
+                                  {topic.keywords.map((word) => (
+                                    <span key={word} className="keyword-badge">
+                                      {word}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+
                               <div className="cluster-summary">
                                 <strong>Краткое содержание:</strong> {generateClusterSummary(items)}
                               </div>
@@ -938,12 +980,29 @@ export default function App() {
                                   <Clock3 size={16} />
                                   <span>Хронология публикаций</span>
                                 </div>
-                                <div className="cluster-timeline-range">
-                                  {timeline.start} → {timeline.end}
-                                </div>
-                                <div className="cluster-timeline-note">
-                                  Новости внутри кластера отсортированы по времени публикации.
-                                </div>
+
+                                {chronology ? (
+                                  <>
+                                    <div className="cluster-timeline-range">
+                                      {chronology.start || "дата не указана"} → {chronology.end || "дата не указана"}
+                                    </div>
+                                    <div className="cluster-timeline-note">
+                                      Длительность информационного повода:{" "}
+                                      {chronology.duration_hours !== null && chronology.duration_hours !== undefined
+                                        ? `${chronology.duration_hours} ч.`
+                                        : "не указана"}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="cluster-timeline-range">
+                                      {timeline.start} → {timeline.end}
+                                    </div>
+                                    <div className="cluster-timeline-note">
+                                      Новости внутри кластера отсортированы по времени публикации.
+                                    </div>
+                                  </>
+                                )}
                               </div>
 
                               <div className="cluster-items">
@@ -976,10 +1035,65 @@ export default function App() {
                   ) : (
                     <>
                       <div className="stats-grid">
-                        <StatCard icon={BarChart3} title="Silhouette" value={formatMetric(result.metrics?.silhouette_score)} dark />
-                        <StatCard icon={Sparkles} title="ARI" value={formatMetric(result.metrics?.adjusted_rand_index, "нет разметки")} dark />
-                        <StatCard icon={BrainCircuit} title="NMI" value={formatMetric(result.metrics?.normalized_mutual_info, "нет разметки")} dark />
-                        <StatCard icon={WandSparkles} title="Шумовые точки" value={result.metrics?.noise_points ?? "—"} dark />
+                        <StatCard
+                          icon={BarChart3}
+                          title="Silhouette"
+                          value={formatMetric(result.metrics?.silhouette_score)}
+                          dark
+                        />
+
+                        <StatCard
+                          icon={Sparkles}
+                          title="ARI"
+                          value={formatMetric(result.metrics?.adjusted_rand_index, "нет разметки")}
+                          dark
+                        />
+
+                        <StatCard
+                          icon={BrainCircuit}
+                          title="NMI"
+                          value={formatMetric(result.metrics?.normalized_mutual_info, "нет разметки")}
+                          dark
+                        />
+
+                        <StatCard
+                          icon={WandSparkles}
+                          title="Шумовые точки"
+                          value={result.metrics?.noise_points ?? "—"}
+                          dark
+                        />
+
+                        <StatCard
+                          icon={BarChart3}
+                          title="Davies-Bouldin"
+                          value={formatMetric(result.metrics?.davies_bouldin_index)}
+                          dark
+                        />
+
+                        <StatCard
+                          icon={LineChart}
+                          title="Calinski-Harabasz"
+                          value={formatMetric(result.metrics?.calinski_harabasz_index)}
+                          dark
+                        />
+
+                        <StatCard
+                          icon={AlertCircle}
+                          title="Доля шума"
+                          value={
+                            result.metrics?.noise_ratio !== undefined
+                              ? `${(result.metrics.noise_ratio * 100).toFixed(1)}%`
+                              : "—"
+                          }
+                          dark
+                        />
+
+                        <StatCard
+                          icon={Database}
+                          title="Средний размер кластера"
+                          value={formatMetric(result.metrics?.avg_cluster_size)}
+                          dark
+                        />
                       </div>
 
                       <div className="chart-box light-chart-box">

@@ -204,3 +204,42 @@
   letter-spacing: 0.04em;
 }
 
+.cluster-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.keyword-badge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cluster-chronology {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 14px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 14px;
+}
+
+.device-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-top: 12px;
+  border-radius: 14px;
+  background: #ecfeff;
+  color: #155e75;
+  font-size: 14px;
+  font-weight: 600;
+}
